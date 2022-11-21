@@ -18,6 +18,7 @@ typedef struct
     int FinishingTime;
     int TurnaroundTime;
     int priority;
+    int EntryFlag;
     int WaitingTime;
     float NormTurn;
     int ready;
@@ -51,9 +52,10 @@ struct MyCompartor3
 {
     bool operator() (Process* p1, Process* p2)
     {
+        
         if (p1->priority == p2->priority)
         {
-            return p1->ArrivalTime > p2->ArrivalTime;
+            return p1->WaitingTime < p2->WaitingTime;
         }
         return p1->priority < p2->priority;
     }
@@ -69,6 +71,7 @@ Process* create_Process(string ProcessName, int ArrivalTime, int ServiceTime)
     p->TurnaroundTime = 0;
     p->NormTurn = 0;
     p->WaitingTime = 0;
+    p->EntryFlag = -1;
     p->ArrivalTime = ArrivalTime;
     p->ServiceTime = ServiceTime;
     p->priority = ServiceTime;
@@ -347,11 +350,12 @@ void SPN(vector <string> processes,const int instants, string status, string pol
                 {
                     q.push(pr[j]);
                     pr[j]->ready=1;
+                    pr[j]->EntryFlag = 1;
                     output[pr[j]->processNumber][i]='.';
                 }
                 else if (pr[j]->ready > 0)
                 {
-                   
+                    pr[j]->EntryFlag = 0;
                     output[pr[j]->processNumber][i]='.';
                 }
             }
@@ -668,16 +672,26 @@ void FB(vector <string> processes,int quantum,const int instants, string status,
     }
 }
 //_______________________________________________Aging____________________________________________________
-
-void incrementPriorities(priority_queue<Process *, vector<Process *>, MyCompartor3> q)
-{
-    for (size_t i = 0; i < q.size(); i++)
+void UpdatePriority(priority_queue<Process *, vector<Process *>, MyCompartor3>& q)
+{   
+    queue<Process *> tq;
+    int count = q.size();
+    for (size_t i = 0; i < count; i++)
     {
-        Process* p = q.top();
-        p->priority++;
+        Process * p = q.top();
         q.pop();
+        p->WaitingTime++;
+        p->priority++;
+        tq.push(p);
+    }
+
+    for (size_t i = 0; i < count; i++)
+    {
+        Process * p = tq.front();
+        tq.pop();
         q.push(p);
     }
+    
     
 }
 
@@ -701,7 +715,7 @@ void Aging(vector <string> processes,int quantum,const int instants, string stat
                     pr[j]->ready=1;
                     output[pr[j]->processNumber][i]='.';
                 }
-                else if (pr[j]->ready != -1)
+                else if (pr[j]->ready > 0)
                 {
                    
                     output[pr[j]->processNumber][i]='.';
@@ -709,15 +723,11 @@ void Aging(vector <string> processes,int quantum,const int instants, string stat
             }
             
         }
-        incrementPriorities(q);
-        if (t != nullptr)
-        {
-            q.push(t);
-            t = nullptr;
-        }
+        UpdatePriority(q);
         if (CPU == nullptr)
         {
             CPU = q.top();
+            CPU->ready = -2;
             q.pop();
         }
         if (CPU != nullptr)
@@ -726,8 +736,9 @@ void Aging(vector <string> processes,int quantum,const int instants, string stat
             output[CPU->processNumber][i] = '*';
             if (consumedQuantum >= quantum)
             {
-                CPU->priority = CPU->ServiceTime;
-                t = CPU;
+                CPU->priority = CPU->ServiceTime - 1;
+                CPU->ready = 0;
+                CPU->WaitingTime = 0;
                 consumedQuantum = 0;
                 CPU = nullptr;
             }
